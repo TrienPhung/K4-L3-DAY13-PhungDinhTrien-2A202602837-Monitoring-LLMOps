@@ -37,13 +37,13 @@
 
 | Nội dung | Baseline | Kết quả cuối | Nhận xét |
 |---|---|---|---|
-| `validate_logs.py` | 30/100 (21 bản ghi, 20 thiếu trường bắt buộc, 0 correlation ID) | | |
-| `validate_dashboard.py` | (chạy rồi điền) | | |
-| `pytest` | 22 passed | | |
-| Số traces hợp lệ | 10 (mới có span gốc `lab-agent-run`) | | |
-| Số PII leak | 0 | | |
-| Latency P95 / TTFT P95 | (điền sau khi tính) | | |
-| Retrieval success rate | (điền sau khi tính) | | |
+| `validate_logs.py` | 30/100 (21 bản ghi, 20 thiếu trường bắt buộc, 0 correlation ID) | 100/100 (10 correlation ID, 0 thiếu trường, 0 PII leak) | Đạt sau khi thêm correlation ID, enrichment và bật `scrub_event` |
+| `validate_dashboard.py` | Chưa chạy (chưa có dashboard) | 6/6 panel hợp lệ | Dashboard Streamlit đủ 6 panel, có threshold |
+| `pytest` | 22 passed | 26 passed | Thêm 4 test PII (CCCD, thẻ, hỗn hợp, văn bản thường) |
+| Số traces hợp lệ | 10 (mới có span gốc `lab-agent-run`) | Hơn 10 trace có cây span `retrieval` + `generation` | Ảnh 06, 07 |
+| Số PII leak | 0 | 0 | Log chỉ còn nhãn `[REDACTED_*]` |
+| Latency P95 / TTFT P95 | Chưa đo (chưa có dashboard) | P95 1473 ms / TTFT P95 50 ms | Dưới ngưỡng SLO 3000 ms (số từ dashboard, ảnh 11) |
+| Retrieval success rate | Chưa đo (chưa có dashboard) | 100% | Trên guardrail 90% |
 
 ## 4. Logging và PII
 
@@ -56,17 +56,17 @@
 
 - **Cách xác nhận traces do chính tôi tạo trong project cá nhân:** Key trong `.env` thuộc project `day13-k4-l3b-2A202602837`, ảnh 06 hiển thị tên project, khoảng thời gian và hơn 10 trace `day13-agent-request` sinh ra từ `load_test.py` và các request tôi tự gửi. Trace tôi đặt ID riêng (`req-aaaa0001`) tìm thấy đúng trong project này.
 - **Cấu trúc root/retrieval/generation observations:** Root `lab-agent-run` (loại agent, trace name `day13-agent-request`) có hai observation con: `retrieval` (loại retriever, gắn `@observe` trên `retrieve()`) và `generation` (loại generation, gắn `@observe` trên `FakeLLM.generate()`). `generation` ghi `model`, `usage` (token vào/ra), `cost` và liên kết prompt version qua `propagate_attributes(prompt=...)`. Tất cả đặt `capture_input=False` và `capture_output=False` để không lưu nội dung câu hỏi (có thể chứa PII).
-- **Cách nối trace với log:** `correlation_id` do middleware sinh được ghi vào metadata của trace (cùng với `feature`, `model`) và cũng có trong mọi dòng structured log. Ví dụ `req-aaaa0001` khớp giữa ảnh 04 và ảnh 08a.
+- **Cách nối trace với log:** `correlation_id` do middleware sinh được ghi vào metadata của trace (cùng với `feature`, `model`) và cũng có trong mọi dòng structured log. Ví dụ `req-aaaa0001` khớp giữa ảnh 04 và ảnh 08a (do đặt lại cùng ID nhiều lần nên các trace được phân biệt bằng trace ID và giờ).
 - **Prompt name:** `day13-chat` (Text prompt, biến `{{feature}}`, `{{docs}}`, `{{message}}`).
 - **Version/label baseline:** v1, nhãn `baseline` và `production`.
 - **Version/label candidate:** v2 (thêm dòng "Answer briefly." ở cuối), nhãn `candidate` (nhãn `latest` do Langfuse tự gắn).
-- **Trace ID của mỗi version:** v1: `6d1ffde5b412273958dad2422a98a42a` (`prompt_version=1`, `prompt_label=baseline`). v2: (điền trace ID sau khi chạy với label `candidate`, `prompt_version=2`).
-- **Cách promote và rollback `production`:** Không sửa code, chỉ dời nhãn `production` trên giao diện Langfuse (Prompts → `day13-chat`). Promote: dời `production` từ v1 sang v2, đặt `LANGFUSE_PROMPT_LABEL=production`, restart API (app cache prompt khoảng 60 giây), gửi một request để kiểm tra `prompt_version=2` (ảnh 10a). Rollback: dời `production` về v1, restart API, gửi request kiểm tra `prompt_version=1` (ảnh 10b). Ảnh 09 thể hiện v1 (`baseline`, `production`) và v2 (`candidate`).
+- **Trace ID của mỗi version:** v1: `18dda823f619f3557615ca84a512d82c` (prompt_version=1, label production, correlation_id req-aaaa0001). v2: `250180fba949fa50673d2c88ad9442a9` (prompt_version=2, label candidate, correlation_id req-bbbb0002).
+- **Cách promote và rollback `production`:** Không sửa code, chỉ dời nhãn `production` trên giao diện Langfuse (Prompts → `day13-chat`). Promote: dời `production` từ v1 sang v2 (ảnh 10a). Rollback: dời `production` về v1 (ảnh 10b). Vì app cache prompt khoảng 60 giây, sau mỗi lần đổi nhãn phải restart API rồi mới gửi request. Ảnh 09 thể hiện v1 (`baseline`, `production`) và v2 (`candidate`).
 
 ## 6. Dashboard, SLO và alerts
 
 - **Dashboard và sáu panel:** Dashboard Streamlit đọc `data/logs.jsonl` theo `config/dashboard.yaml`, gồm 6 panel: Latency (P50/P95/P99, TTFT P95, ms), Traffic (requests/phút), Errors (error rate % và retrieval success %), Cost (USD), Tokens (vào/ra), Quality (điểm 0 đến 1). Mỗi panel có đơn vị, time range 60 phút, refresh 30 giây và đường threshold (ảnh 11).
-- **SLO và lý do chọn:** 99.5% request hoàn thành thành công trong ≤ 3000 ms, cửa sổ 28 ngày. Baseline của tôi không có request lỗi, request thường mất 400-600 ms và chậm nhất khoảng 2.7 s (request khởi động), nên mục tiêu này đạt được nhưng vẫn phát hiện được sự cố retrieval chậm (+2.5 s).
+- **SLO và lý do chọn:** 99.5% request hoàn thành thành công trong ≤ 3000 ms, cửa sổ 28 ngày. Baseline của tôi không có request lỗi, request thường mất 400-600 ms; chỉ request đầu tiên sau khi restart API chậm hơn (2.7 đến 4.6 s) vì phải tải prompt. Những request này tính vào error budget, nên mục tiêu 99.5% vẫn đạt được nhưng có ý nghĩa, và sự cố retrieval chậm (+2.5 s) vẫn phát hiện được.
 - **Cách tính error budget:** SLO 99.5% trong 28 ngày nghĩa là error budget 0.5%. Nếu workload có 10,000 request thì tối đa 50 request được phép lỗi hoặc chậm hơn 3000 ms.
 - **Ba alert và runbook tương ứng:** `HighLatencyP95` (P95 > 2000 ms trong 5 phút, cảnh báo sớm trước SLO), `HighErrorRate` (error rate > 2% hoặc retrieval success < 90% trong 5 phút), `HighCostPerRequest` (chi phí trung bình > 0.005 USD mỗi request trong 5 phút). Runbook nằm ở `docs/alerts.md` (Alert 1, 2, 3), theo chuỗi Metrics → Logs → Traces.
 
