@@ -21,7 +21,7 @@ REFRESH = CFG["refresh_seconds"]
 
 st.set_page_config(page_title=CFG["title"], layout="wide")
 st.title(CFG["title"])
-anchor = st.sidebar.checkbox("Lay moc thoi gian theo log moi nhat (thay vi gio hien tai)", value=False)
+anchor = st.sidebar.checkbox("Lay moc thoi gian theo log moi nhat (thay vi gio hien tai)", value=True)
 
 
 def load():
@@ -42,7 +42,7 @@ def load():
 
 def window(df):
     end = df["ts"].max() if anchor else pd.Timestamp.now(tz="UTC")
-    start = end - timedelta(minutes=RANGE_MIN)
+    start = (df["ts"].min() - timedelta(minutes=1)) if anchor else (end - timedelta(minutes=RANGE_MIN))
     return df[(df["ts"] >= start) & (df["ts"] <= end)], start, end
 
 
