@@ -4,13 +4,13 @@
 
 ## 1. Thông tin học viên
 
-- **Họ và tên:**
-- **MSSV:**
+- **Họ và tên:** Phùng Đình Triển
+- **MSSV:** 2A202602837
 - **Lớp:** K4-L3B
-- **Repository URL:**
-- **Commit SHA cuối:**
-- **Challenge ID:**
-- **Tên project Langfuse cá nhân:** `day13-k4-l3b-<MSSV>`
+- **Repository URL:** https://github.com/TrienPhung/K4-L3-DAY13-PhungDinhTrien-2A202602837-Monitoring-LLMOps
+- **Commit SHA cuối:** (điền ở CP4)
+- **Challenge ID:** (điền ở CP3)
+- **Tên project Langfuse cá nhân:** `day13-k4-l3b-2A202602837`
 
 ## 2. Evidence index
 
@@ -37,20 +37,20 @@
 
 | Nội dung | Baseline | Kết quả cuối | Nhận xét |
 |---|---|---|---|
-| `validate_logs.py` | | | |
-| `validate_dashboard.py` | | | |
-| `pytest` | | | |
-| Số traces hợp lệ | | | |
-| Số PII leak | | | |
-| Latency P95 / TTFT P95 | | | |
-| Retrieval success rate | | | |
+| `validate_logs.py` | 30/100 (21 bản ghi, 20 thiếu trường bắt buộc, 0 correlation ID) | | |
+| `validate_dashboard.py` | (chạy rồi điền) | | |
+| `pytest` | 22 passed | | |
+| Số traces hợp lệ | 10 (mới có span gốc `lab-agent-run`) | | |
+| Số PII leak | 0 | | |
+| Latency P95 / TTFT P95 | (điền sau khi tính) | | |
+| Retrieval success rate | (điền sau khi tính) | | |
 
 ## 4. Logging và PII
 
-- **Cách tạo/nhận và truyền correlation ID:**
-- **Các metadata được ghi vào structured log:**
-- **Cách bảo đảm PII được scrub trước khi ghi:**
-- **Cách kiểm chứng kết quả:**
+- **Cách tạo/nhận và truyền correlation ID:** Middleware đọc header `x-request-id`, nếu không có thì tự sinh `req-` cộng 8 ký tự hex, gắn vào structlog contextvars cho mọi dòng log của request, và trả lại qua header response.
+- **Các metadata được ghi vào structured log:** `correlation_id`, `user_id_hash`, `session_id`, `feature`, `model`, `env`, cùng `latency_ms`, token, cost ở event `response_sent`.
+- **Cách bảo đảm PII được scrub trước khi ghi:** Bật `scrub_event` trong chuỗi processor, đặt trước `JsonlFileProcessor` (bước ghi file).
+- **Cách kiểm chứng kết quả:** `validate_logs.py` đạt 100/100, `pytest` 26 passed, và ảnh 04, 05 (ID `req-1a2b3c4d` và `req-a1b2c3d4`).**
 
 ## 5. Tracing và prompt versioning
 
